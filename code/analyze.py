@@ -736,8 +736,10 @@ def main():
 
     print("Loading model/vocab")
 
-    tokenizer = AutoTokenizer.from_pretrained("../models/roberta_snli_finetuned")
-    hf_model = AutoModelForSequenceClassification.from_pretrained("../models/roberta_snli_finetuned", output_hidden_states=True)
+    model_path = os.path.join("")
+
+    tokenizer = AutoTokenizer.from_pretrained("roberta-base")
+    hf_model = AutoModelForSequenceClassification.from_pretrained("models/roberta_snli_finetuned", output_hidden_states=True)
 
     if settings.CUDA:
         hf_model = hf_model.cuda()
@@ -753,13 +755,7 @@ def main():
 
     model = HFWrapper(hf_model, tokenizer, dataset)
 
-    # TODO: below
-
-    # Last model weight
-    if settings.MODEL_TYPE == "minimal":
-        weights = model.md.weight.t().detach().cpu().numpy()
-    else:
-        weights = model.mlp[-1].weight.t().detach().cpu().numpy()
+    weights = model.model.classifier.out_proj.weight.t().detach().cpu().numpy()
 
     print("Extracting features")
     toks, states, feats, idxs = extract_features(
