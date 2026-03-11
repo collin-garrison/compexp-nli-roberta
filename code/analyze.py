@@ -736,8 +736,6 @@ def main():
 
     print("Loading model/vocab")
 
-    model_path = os.path.join("")
-
     tokenizer = AutoTokenizer.from_pretrained("roberta-base")
     hf_model = AutoModelForSequenceClassification.from_pretrained("models/roberta_snli_finetuned", output_hidden_states=True)
 
@@ -768,6 +766,11 @@ def main():
 
     print("Extracting sentence token features")
     tok_feats, tok_feats_vocab = to_sentence(toks, feats, dataset)
+
+    n = tok_feats.shape[0]
+    acts = acts[:n]
+    states = states[:n]
+
     print("Mask search")
     records = search_feats(acts, states, (tok_feats, tok_feats_vocab), weights, dataset)
 
