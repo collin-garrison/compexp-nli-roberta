@@ -17,6 +17,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from scipy.spatial.distance import cdist
 from sklearn.metrics import precision_score, recall_score
+from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
 import formula as FM
 import settings
@@ -30,6 +31,42 @@ import warnings
 warnings.simplefilter("ignore", pd.errors.PerformanceWarning)
 
 GLOBALS = {}
+
+
+class HFWrapper(torch.nn.Module):
+    def __init__(self, model, tokenizer, dataset):
+        super().__init__()
+        self.model = model
+        self.tokenizer = tokenizer
+        self.dataset = dataset
+        self.encoder_dim = model.config.hidden_size
+
+    def get_final_reprs(self, s1, s1len, s2, s2len):
+        premise = [] 
+        hypothesis = []
+
+        for row in s1.cpu():
+            sentence = ""
+            for tok in row:
+                if int(tok) != data.analysis.PAD_IDX:
+                    sentence += " " + self.dataset.itos[int(tok)]
+            premise.append(sentence[1:])
+        
+        for row in s2.cpu():
+            sentence = ""
+            for tok in row:
+                if int(tok) != data.analysis.PAD_IDX:
+                    sentence += " " + self.dataset.itos[int(tok)]
+            hypothesis.append(sentence[1:])
+
+        batch = self.tokenizer(premise, hypothesis, padding=True, truncation=True, return_tensors="pt")
+
+        if next(self.model.parameters()).is_cuda:
+            batch = {k: v.cuda() for k,v in batch.items()}
+
+        out = self.model(**batch, output_hidden_states=True)
+
+        return out.hidden_states[-1][:,0,:]
 
 
 def save_with_acts(preds, acts, fname):
@@ -698,16 +735,29 @@ def main():
     os.makedirs(settings.RESULT, exist_ok=True)
 
     print("Loading model/vocab")
-    model, dataset = data.snli.load_for_analysis(
+
+    tokenizer = AutoTokenizer.from_pretrained("../models/roberta_snli_finetuned")
+    hf_model = AutoModelForSequenceClassification.from_pretrained("../models/roberta_snli_finetuned", output_hidden_states=True)
+
+    if settings.CUDA:
+        hf_model = hf_model.cuda()
+
+    hf_model.eval()
+    
+    _, dataset = data.snli.load_for_analysis(
         settings.MODEL,
         settings.DATA,
         model_type=settings.MODEL_TYPE,
         cuda=settings.CUDA,
     )
 
+    model = HFWrapper(hf_model, tokenizer, dataset)
+
+    # TODO: below
+
     # Last model weight
     if settings.MODEL_TYPE == "minimal":
-        weights = model.mlp.weight.t().detach().cpu().numpy()
+        weights = model.md.weight.t().detach().cpu().numpy()
     else:
         weights = model.mlp[-1].weight.t().detach().cpu().numpy()
 
