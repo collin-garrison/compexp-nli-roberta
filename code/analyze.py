@@ -25,7 +25,9 @@ from vis import report, pred_report
 import data
 import data.snli
 import data.analysis
+import warnings
 
+warnings.simplefilter("ignore", pd.errors.PerformanceWarning)
 
 GLOBALS = {}
 
