@@ -40,10 +40,17 @@ class HFWrapper(torch.nn.Module):
         self.tokenizer = tokenizer
         self.dataset = dataset
         self.encoder_dim = model.config.hidden_size
+        self.activations = None
+
+        self.hook_handle = self.model.roberta.encoder.layer[-1].output.LayerNorm.register_forward_hook(self.hook)
+
+    def hook(self, module, input, output):
+        self.activations = output.detach()
 
     def get_final_reprs(self, s1, s1len, s2, s2len):
         premise = [] 
         hypothesis = []
+        self.activations = None
 
         for row in s1.cpu():
             sentence = ""
@@ -64,9 +71,10 @@ class HFWrapper(torch.nn.Module):
         if next(self.model.parameters()).is_cuda:
             batch = {k: v.cuda() for k,v in batch.items()}
 
-        out = self.model(**batch, output_hidden_states=True)
+        with torch.no_grad():
+            self.model(**batch)
 
-        return out.hidden_states[-1][:,0,:]
+        return self.activations[:,0,:]
 
 
 def save_with_acts(preds, acts, fname):
@@ -737,7 +745,7 @@ def main():
     print("Loading model/vocab")
 
     tokenizer = AutoTokenizer.from_pretrained("roberta-base")
-    hf_model = AutoModelForSequenceClassification.from_pretrained("models/roberta_snli_finetuned", output_hidden_states=True)
+    hf_model = AutoModelForSequenceClassification.from_pretrained("models/roberta_snli_finetuned")
 
     if settings.CUDA:
         hf_model = hf_model.cuda()
